@@ -5,8 +5,10 @@ import {
   Layers,
   GitCompareArrows,
   Info,
+  RefreshCw,
 } from "lucide-react";
-import type { Settings } from "../types/analysis";
+import type { ActiveModels, Settings } from "../types/analysis";
+
 const models = [
   {
     value: "simple_ann",
@@ -22,17 +24,27 @@ const models = [
     icon: GitCompareArrows,
   },
 ] as const;
+
 export function ConfigurationPanel({
   settings,
   onChange,
   disabled,
+  activeModels,
+  trainingError,
+  onTrain,
 }: {
   settings: Settings;
   onChange: (settings: Settings) => void;
   disabled: boolean;
+  activeModels: ActiveModels | null;
+  trainingError: string;
+  onTrain: () => void;
 }) {
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) =>
     onChange({ ...settings, [key]: value });
+  const comparison = settings.model === "comparison";
+  const trainingModel = settings.model === "cnn" ? "cnn" : "simple_ann";
+
   return (
     <aside className="config-card">
       <div className="card-heading">
@@ -51,7 +63,14 @@ export function ConfigurationPanel({
                 type="radio"
                 name="model"
                 checked={settings.model === value}
-                onChange={() => update("model", value)}
+                onChange={() =>
+                  onChange({
+                    ...settings,
+                    model: value,
+                    data_augmentation:
+                      value === "cnn" && settings.data_augmentation,
+                  })
+                }
               />
               <Icon size={20} strokeWidth={1.6} />
               <span>
@@ -95,18 +114,52 @@ export function ConfigurationPanel({
           Advanced Settings
           <ChevronDown size={16} />
         </summary>
+        <div className="active-models" aria-label="Models currently in use">
+          <div className="active-models-heading">
+            <strong>Models currently in use</strong>
+          </div>
+          {activeModels ? (
+            (["simple_ann", "cnn"] as const).map((model) => (
+              <div className="active-model" key={model}>
+                <div className="active-model-name">
+                  <strong>{model === "simple_ann" ? "Simple ANN" : "CNN"}</strong>
+                  <span>{activeModels[model].ready ? "Active" : "Unavailable"}</span>
+                </div>
+                <p>
+                  {activeModels[model].settings.epochs} epochs · Learning rate{" "}
+                  {activeModels[model].settings.learning_rate}
+                </p>
+                <p>
+                  Batch {activeModels[model].settings.batch_size} · Seed{" "}
+                  {activeModels[model].settings.random_seed}
+                  {` · Augmentation ${
+                    activeModels[model].settings.data_augmentation
+                      ? "on"
+                      : "off"
+                  }`}
+                </p>
+              </div>
+            ))
+          ) : (
+            <p>Active model information is unavailable.</p>
+          )}
+        </div>
         <fieldset disabled={disabled} className="advanced-fields">
           <label>
             Epochs
             <input
               type="number"
               min="1"
+              max="200"
               step="1"
               value={settings.epochs}
-              onChange={(e) =>
+              onChange={(event) =>
                 update(
                   "epochs",
-                  Math.max(1, Math.floor(Number(e.target.value))),
+                  Math.min(
+                    200,
+                    Math.max(1, Math.floor(Number(event.target.value))),
+                  ),
                 )
               }
             />
@@ -115,40 +168,50 @@ export function ConfigurationPanel({
             Learning Rate
             <input
               type="number"
-              min="0.000001"
+              min="0"
               max="1"
-              step="0.001"
+              step="any"
               value={settings.learning_rate}
-              onChange={(e) =>
-                update(
-                  "learning_rate",
-                  Math.min(1, Math.max(0.000001, Number(e.target.value))),
-                )
-              }
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                if (value > 0 && value <= 1) update("learning_rate", value);
+              }}
             />
           </label>
           <label>
             Batch Size
-            <select
+            <input
+              type="number"
+              min="1"
+              max="256"
+              step="1"
               value={settings.batch_size}
-              onChange={(e) => update("batch_size", Number(e.target.value))}
-            >
-              {[16, 32, 64].map((size) => (
-                <option key={size}>{size}</option>
-              ))}
-            </select>
+              onChange={(event) =>
+                update(
+                  "batch_size",
+                  Math.min(
+                    256,
+                    Math.max(1, Math.floor(Number(event.target.value))),
+                  ),
+                )
+              }
+            />
           </label>
           <label>
             Random Seed
             <input
               type="number"
               min="0"
+              max="2147483647"
               step="1"
               value={settings.random_seed}
-              onChange={(e) =>
+              onChange={(event) =>
                 update(
                   "random_seed",
-                  Math.max(0, Math.floor(Number(e.target.value))),
+                  Math.min(
+                    2147483647,
+                    Math.max(0, Math.floor(Number(event.target.value))),
+                  ),
                 )
               }
             />
@@ -157,11 +220,35 @@ export function ConfigurationPanel({
             <input
               type="checkbox"
               checked={settings.data_augmentation}
-              onChange={(e) => update("data_augmentation", e.target.checked)}
+              disabled={settings.model !== "cnn"}
+              onChange={(event) =>
+                update("data_augmentation", event.target.checked)
+              }
             />
             Data Augmentation
+            {settings.model !== "cnn" && <small>CNN only</small>}
           </label>
-          <p>Training parameters. Model training is not performed in Lab 1.</p>
+          <p>
+            Retraining is optional. The active models above are ready for immediate
+            analysis.
+          </p>
+          <button
+            type="button"
+            className="train-button"
+            disabled={disabled || comparison}
+            onClick={onTrain}
+          >
+            <RefreshCw size={14} />
+            Train {trainingModel === "cnn" ? "CNN" : "Simple ANN"}
+          </button>
+          {comparison && (
+            <p className="training-help">Select one model to retrain it.</p>
+          )}
+          {trainingError && (
+            <p className="training-form-error" role="alert">
+              {trainingError}
+            </p>
+          )}
         </fieldset>
       </details>
       <div className="config-note">

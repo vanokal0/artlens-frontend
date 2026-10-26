@@ -1,31 +1,27 @@
 import type { AnalysisApi, AnalysisStatus } from "../types/analysis";
 import { mockAnalysisApi } from "./mockAnalysisApi";
-
-const base = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
-async function responseJson<T>(response: Response): Promise<T> {
-  if (!response.ok)
-    throw new Error(
-      `The server could not process the analysis (${response.status}). Please try again.`,
-    );
-  return response.json() as Promise<T>;
-}
+import { requestJson } from "./apiClient";
 export const realAnalysisApi: AnalysisApi = {
   async create(request, signal) {
     const body = new FormData();
-    for (const [key, value] of Object.entries(request))
-      body.append(key, value instanceof File ? value : String(value));
-    return responseJson<{ analysisId: string }>(
-      await fetch(`${base}/api/analyses`, { method: "POST", body, signal }),
-    );
+    body.append("image", request.image);
+    body.append("model", request.model);
+    body.append("result_type", request.result_type);
+    return requestJson<{ analysisId: string }>("/api/analyses", {
+      method: "POST",
+      body,
+      signal,
+    });
   },
   async poll(id, signal) {
-    return responseJson<AnalysisStatus>(
-      await fetch(`${base}/api/analyses/${encodeURIComponent(id)}`, { signal }),
+    return requestJson<AnalysisStatus>(
+      `/api/analyses/${encodeURIComponent(id)}`,
+      { signal },
     );
   },
 };
 export const analysisApi =
-  import.meta.env.VITE_USE_MOCK_API === "false"
-    ? realAnalysisApi
-    : mockAnalysisApi;
-export const isMockApi = import.meta.env.VITE_USE_MOCK_API !== "false";
+  import.meta.env.VITE_USE_MOCK_API === "true"
+    ? mockAnalysisApi
+    : realAnalysisApi;
+export const isMockApi = import.meta.env.VITE_USE_MOCK_API === "true";

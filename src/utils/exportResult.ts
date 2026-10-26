@@ -43,7 +43,7 @@ export async function captureResult(
   const canvas = await toCanvas(element, {
     pixelRatio: 2,
     backgroundColor:
-      getComputedStyle(element).getPropertyValue("--page").trim() || "#f3f0e8",
+      getComputedStyle(element).getPropertyValue("--page").trim() || "#f4efe9",
   });
   return format === "bmp"
     ? bmp(canvas)

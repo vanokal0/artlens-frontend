@@ -8,16 +8,22 @@
   -webkit-font-smoothing: antialiased;
   font-size: 14px;
   color-scheme: light;
-  --page: #f3f0e8;
-  --surface: #fffdf8;
-  --text-primary: #2a2722;
-  --text-secondary: #6e685e;
-  --green: #5d705c;
-  --green-hover: #4e604d;
-  --border: #d7d0c4;
-  --selected: #e3e9de;
-  --selected-hover: #d9e2d3;
-  --hover: #edf0e8;
+  --page: #f4efe9;
+  --surface: #fffdfc;
+  --text-primary: #2a2523;
+  --text-secondary: #6f645e;
+  --accent: #8c4f45;
+  --accent-hover: #744138;
+  --border: #d8cec7;
+  --selected: #f1e1dd;
+  --selected-hover: #e9d4ce;
+  --hover: #f7ece8;
+  --accent-border: #a97468;
+  --accent-muted: #a56f64;
+  --surface-muted: #f5f0eb;
+  --disabled: #ece7e2;
+  --disabled-text: #81766f;
+  --track: #e6ded7;
 }
 * {
   box-sizing: border-box;
@@ -49,7 +55,7 @@ a:focus-visible,
 input:focus-visible,
 summary:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--green);
+  outline: 2px solid var(--accent);
 }
 a {
   color: inherit;

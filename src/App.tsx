@@ -10,9 +10,11 @@ import { Header } from "./components/Header";
 import { ImageUploader } from "./components/ImageUploader";
 import { ConfigurationPanel } from "./components/ConfigurationPanel";
 import { AnalysisProgress } from "./components/AnalysisProgress";
+import { TrainingProgress } from "./components/TrainingProgress";
 import { Results } from "./components/Results";
 import { ExportControl } from "./components/ExportControl";
 import { analysisApi, isMockApi } from "./api/analysisApi";
+import { trainingApi } from "./api/trainingApi";
 import { loadImage } from "./utils/file";
 import { styles } from "./types/analysis";
 import type {
@@ -20,6 +22,7 @@ import type {
   LoadedImage,
   ResultType,
   Settings,
+  TrainingStatus,
 } from "./types/analysis";
 import { styleAssets } from "./data/styleAssets";
 import "./App.css";
@@ -51,10 +54,19 @@ function App() {
   const [progress, setProgress] = useState<AnalysisStatus | null>(null),
     [resultType, setResultType] = useState<ResultType>("single"),
     [error, setError] = useState("");
+  const [trainingStatus, setTrainingStatus] = useState<TrainingStatus | null>(
+      null,
+    ),
+    [trainingError, setTrainingError] = useState(""),
+    [trainingStarting, setTrainingStarting] = useState(false),
+    [trainingCancelling, setTrainingCancelling] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null),
     busy = useRef(false),
     uploadToken = useRef(0),
     controller = useRef<AbortController | null>(null);
+  const trainingBusy =
+    trainingStatus?.status === "running" ||
+    trainingStatus?.status === "cancelling";
   useEffect(
     () => () => {
       controller.current?.abort();
@@ -68,6 +80,55 @@ function App() {
     },
     [image],
   );
+  useEffect(() => {
+    if (isMockApi) return;
+    const abort = new AbortController();
+    void trainingApi
+      .status(abort.signal)
+      .then((status) => {
+        setTrainingStatus(status);
+        setTrainingError("");
+      })
+      .catch((cause: unknown) => {
+        if (!(cause instanceof DOMException && cause.name === "AbortError"))
+          setTrainingError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not load model training status.",
+          );
+      });
+    return () => abort.abort();
+  }, []);
+  useEffect(() => {
+    if (!trainingBusy || isMockApi) return;
+    const abort = new AbortController();
+    let polling = false;
+    const timer = window.setInterval(() => {
+      if (polling) return;
+      polling = true;
+      void trainingApi
+        .status(abort.signal)
+        .then((status) => {
+          setTrainingStatus(status);
+          setTrainingError("");
+        })
+        .catch((cause: unknown) => {
+          if (!(cause instanceof DOMException && cause.name === "AbortError"))
+            setTrainingError(
+              cause instanceof Error
+                ? cause.message
+                : "Could not refresh model training status.",
+            );
+        })
+        .finally(() => {
+          polling = false;
+        });
+    }, 1000);
+    return () => {
+      window.clearInterval(timer);
+      abort.abort();
+    };
+  }, [trainingBusy]);
   async function upload(file: File) {
     if (busy.current) return;
     const token = ++uploadToken.current;
@@ -92,7 +153,14 @@ function App() {
     }
   }
   async function analyze() {
-    if (!image || busy.current || uploadState !== "ready") return;
+    if (
+      !image ||
+      busy.current ||
+      uploadState !== "ready" ||
+      trainingBusy ||
+      trainingStarting
+    )
+      return;
     busy.current = true;
     setAnalysisState("analyzing");
     setError("");
@@ -108,7 +176,11 @@ function App() {
     controller.current = abort;
     try {
       const { analysisId } = await analysisApi.create(
-        { ...settings, image: image.file },
+        {
+          image: image.file,
+          model: settings.model,
+          result_type: settings.result_type,
+        },
         abort.signal,
       );
       const start = performance.now();
@@ -156,7 +228,58 @@ function App() {
       busy.current = false;
     }
   }
+  async function startTraining() {
+    if (
+      isMockApi ||
+      settings.model === "comparison" ||
+      trainingBusy ||
+      trainingStarting ||
+      busy.current
+    )
+      return;
+    setTrainingStarting(true);
+    setTrainingError("");
+    try {
+      setTrainingStatus(
+        await trainingApi.start({
+          model: settings.model,
+          epochs: settings.epochs,
+          learning_rate: settings.learning_rate,
+          batch_size: settings.batch_size,
+          random_seed: settings.random_seed,
+          data_augmentation:
+            settings.model === "cnn" && settings.data_augmentation,
+        }),
+      );
+    } catch (cause) {
+      setTrainingError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not start model training.",
+      );
+    } finally {
+      setTrainingStarting(false);
+    }
+  }
+  async function cancelTraining() {
+    if (!trainingBusy || trainingCancelling) return;
+    setTrainingCancelling(true);
+    setTrainingError("");
+    try {
+      setTrainingStatus(await trainingApi.cancel());
+    } catch (cause) {
+      setTrainingError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not cancel model training.",
+      );
+    } finally {
+      setTrainingCancelling(false);
+    }
+  }
   const analyzing = analysisState === "analyzing";
+  const configurationLocked =
+    analyzing || trainingBusy || trainingStarting || trainingCancelling;
   return (
     <>
       <Header
@@ -212,7 +335,12 @@ function App() {
               <button
                 className="analyze-button"
                 onClick={analyze}
-                disabled={uploadState !== "ready" || analyzing}
+                disabled={
+                  uploadState !== "ready" ||
+                  analyzing ||
+                  trainingBusy ||
+                  trainingStarting
+                }
               >
                 {analyzing ? (
                   <LoaderCircle size={18} className="spin" />
@@ -276,8 +404,22 @@ function App() {
             <ConfigurationPanel
               settings={settings}
               onChange={setSettings}
-              disabled={analyzing}
+              disabled={configurationLocked}
+              activeModels={trainingStatus?.activeModels ?? null}
+              trainingError={
+                isMockApi
+                  ? "Training is available when the FastAPI backend is enabled."
+                  : trainingError
+              }
+              onTrain={() => void startTraining()}
             />
+            {trainingStatus && trainingStatus.status !== "idle" && (
+              <TrainingProgress
+                training={trainingStatus}
+                cancelling={trainingCancelling}
+                onCancel={() => void cancelTraining()}
+              />
+            )}
           </div>
         </div>
         <section className="style-guide" id="style-guide">

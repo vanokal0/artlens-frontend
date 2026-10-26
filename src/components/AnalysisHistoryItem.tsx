@@ -33,7 +33,8 @@ export function AnalysisHistoryItem({
           </h3>
           {entry.model !== "comparison" && (
             <p className="history-confidence">
-              {(entry.prediction.confidence * 100).toFixed(1)}% confidence
+              {(entry.prediction.confidence * 100).toFixed(1)}%{" "}
+              {entry.model === "simple_ann" ? "normalized score" : "confidence"}
             </p>
           )}
           <p>

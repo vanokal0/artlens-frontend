@@ -8,6 +8,8 @@ import type {
 import { modelLabels } from "../types/analysis";
 import { styleAssets } from "../data/styleAssets";
 export function SingleResult({ result }: { result: ModelResult }) {
+  const valueLabel =
+    result.model === "simple_ann" ? "normalized score" : "confidence";
   return (
     <div className="single-result">
       <img
@@ -20,23 +22,25 @@ export function SingleResult({ result }: { result: ModelResult }) {
         <h3>{result.prediction.style.toUpperCase()}</h3>
         <p>
           {modelLabels[result.model]} ·{" "}
-          {(result.prediction.confidence * 100).toFixed(1)}% confidence
+          {(result.prediction.confidence * 100).toFixed(1)}% {valueLabel}
         </p>
       </div>
     </div>
   );
 }
 export function ProbabilityList({ result }: { result: ModelResult }) {
+  const ann = result.model === "simple_ann";
   return (
     <div className="probability-panel">
       <h3>
         {modelLabels[result.model]}
-        <span>STYLE PROBABILITY</span>
+        <span>{ann ? "NORMALIZED STYLE SCORES" : "STYLE PROBABILITY"}</span>
       </h3>
       <p className="probability-prediction">
         Predicted style: <strong>{result.prediction.style}</strong>
         {" · "}
-        {(result.prediction.confidence * 100).toFixed(1)}% confidence
+        {(result.prediction.confidence * 100).toFixed(1)}%{" "}
+        {ann ? "top score" : "confidence"}
       </p>
       {[...result.probabilities]
         .sort((a, b) => b.probability - a.probability)

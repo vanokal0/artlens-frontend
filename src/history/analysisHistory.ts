@@ -191,7 +191,7 @@ async function makeThumbnail(image: LoadedImage): Promise<string | undefined> {
     canvas.height = Math.max(1, Math.round(preview.naturalHeight * ratio));
     const context = canvas.getContext("2d");
     if (!context) return;
-    context.fillStyle = "#fffdf8";
+    context.fillStyle = "#fffdfc";
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(preview, 0, 0, canvas.width, canvas.height);
     const data = canvas.toDataURL("image/jpeg", 0.65);
